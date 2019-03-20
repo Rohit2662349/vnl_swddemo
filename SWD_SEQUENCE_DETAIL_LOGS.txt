@@ -1,0 +1,209 @@
+////////// LOGS TO UNDERSTAND SWD_DEMO /////////////////////
+
+================================================================================
+CMD SYNTAX:
+
+S.NO  COMMANDS      ARG1      ARG2    DESCRIPTION 
+1)    swd_init                      : for performing line reset and jtag to swd swap
+2)    swd_read_dp   reg_addr        : for reading dp register
+3)    swd_write_dp  reg_addr  data  : for reading dp register
+4)    swd_read_ap   reg_addr        : for reading dp register
+5)    swd_write_dp  reg_addr  data  : for reading dp register 
+
+================================================================================
+
+1) LOGS FOR SEQUENCE W.R.T ARM INFOCENTER DOCUMENT	
+	- SWD_INIT
+	- SWD_DP_WRITE(CSW REGISTER) WITH 0X50000000
+	- ABOVE STEP FAILS WITH WDATAERR FLAG
+	
+	Swd_Demo>>swd_init											// swd init done recieved expected DP_ID 0x2ba01477
+	TARGET_ID = 0x2ba01477, Result:1, Parity:0_a5
+
+	Swd_Demo>>swd_read_dp 0
+	DP_Read = 0x2ba01477, ACK:1, Parity:0, Cmd:a5
+
+	Swd_Demo>>swd_read_dp 1
+	DP_Read = 0x0, ACK:1, Parity:0, Cmd:8d
+
+	Swd_Demo>>swd_write_dp 1 1342177280							// written csw register of dp with 0X50000000
+	DP_Write = 0x50000000, ACK:1, Parity:0, Cmd:8b
+
+	Swd_Demo>>swd_read_dp 3										// bus halted
+	DP_Read = 0xffffffff, ACK:1, Parity:1, Cmd:bd
+
+	Swd_Demo>>swd_read_dp 1										// bus halted
+	DP_Read = 0xffffffff, ACK:1, Parity:1, Cmd:8d
+
+	Swd_Demo>>swd_init											// swd init required for bus to function again
+	TARGET_ID = 0x2ba01477, Result:1, Parity:0_a5	
+
+	Swd_Demo>>swd_read_dp 1										// read CSW register wdataerr flag recieved 0X80
+	DP_Read = 0x80, ACK:1, Parity:1, Cmd:8d						
+
+=====================================================================================
+
+2) LOGS FOR SEQUENCE THAT WE FOLLOWED WITH STM32F411
+	- SWD_INIT
+	- SWD_DP_WRITE(CSW REGISTER) WITH 0X54000000
+	- PASSED WITHOUT WDATAERR FLAG
+	- SWD_AP_WRITE(CSW_REGISTER) WITH 0X1000012 (i.e 32bit trasaction with auto-incriment)
+	- READ FLASH DATA CHECK EXPECTED VALUES THAT ARE WRITTEN TO FLASH USING DEBUGGER
+	- JUMP TO FLASH PERIPHERAL REGISTER BASE ADDRESS
+	- READ FLASH PERIPHERAL REGISTER CHECK EXPECTED VALUES THAT ARE MENTIONED IN REFRENCE MANUAL
+	- TRY WRITTING TO FLASH_ACR REGSITER TO CHECK THE ACCESS TO FLASH
+	- SUCCESSFULLY WRITTEN & CHECKED VALUE 0x703 TO FLASH_ACR REGISTER
+	- TRY UNLOCKING THE FLASH BY WRITTING KEY PROVIDED IN REFRENCE MANUAL TO FLASH_KEY REGISTER
+	- ABOVE STEP FAILS WITH WDATAERR FLAG
+	
+	Swd_Demo>>swd_init											// swd init done recieved expected DP_ID 0x2ba01477
+	TARGET_ID = 0x2ba01477, Result:1, Parity:0_a5
+
+	Swd_Demo>>swd_read_dp 1
+	DP_Read = 0x0, ACK:1, Parity:0, Cmd:8d
+
+	Swd_Demo>>swd_write_dp 1 1409286144							// written csw register of dp with 0X54000000
+	DP_Write = 0x54000000, ACK:1, Parity:1, Cmd:8b
+
+	Swd_Demo>>swd_read_dp 1										// PASSED WITHOUT WDATAERR
+	DP_Read = 0xf4000000, ACK:1, Parity:1, Cmd:8d
+
+	Swd_Demo>>swd_read_ap 0										// read csw register from MEM_AP
+	AP_Read = 0x0, ACK:1, Parity:0, Cmd:87
+
+	Swd_Demo>>swd_read_ap 0										// read value 0x1000040
+	AP_Read = 0x1000040, ACK:1, Parity:0, Cmd:87
+
+	Swd_Demo>>swd_write_ap 0 16777234							// write csw register of MEM_AP with 0x1000012
+	AP_Write = 0x1000012, ACK:1, Parity:1, Cmd:a3
+
+	Swd_Demo>>swd_read_ap 0										// successfully written 0x1000012 
+	AP_Read = 0x1000052, ACK:1, Parity:0, Cmd:87
+
+	
+====== TRY READING FLASH DATA FOR EXPECTED VALUES =================
+	Swd_Demo>>swd_read_ap 3										// reading from MEM_AP flash 
+	AP_Read = 0x1000052, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// recieved expected values that are already written to flash using debugger
+	AP_Read = 0x20000ad0, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x80001ad, ACK:1, Parity:1, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x80017f1, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x8001791, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x80017ed, ACK:1, Parity:1, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x80004e7, ACK:1, Parity:0, Cmd:9f
+	
+	
+====== TRY READING FLASH PERIPHERAL REGISTER FOR EXPECTED VALUES =================	
+
+	Swd_Demo>>swd_write_ap 1 1073888256							// jumped to FLASH peripheral regsiters base(0x40023c00) by writting it in TAR register of MEM_AP 
+	AP_Write = 0x40023c00, ACK:1, Parity:0, Cmd:8b
+
+	Swd_Demo>>swd_read_ap 1
+	AP_Read = 0x8002233, ACK:1, Parity:1, Cmd:af
+
+	Swd_Demo>>swd_read_ap 1										// successfully jumped to flash peripheral register
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:af
+
+	Swd_Demo>>swd_read_ap 3
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_ACR register
+	AP_Read = 0x700, ACK:1, Parity:1, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_KEY register
+	AP_Read = 0x0, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_OPTKEYR register
+	AP_Read = 0x0, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_SR register
+	AP_Read = 0x0, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_CR register
+	AP_Read = 0x80000000, ACK:1, Parity:1, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 3										// reading flash peripheral register FLASH_OPTCR register
+	AP_Read = 0xfffaaed, ACK:1, Parity:0, Cmd:9f
+
+	
+	
+	
+====== TRY WRITTING FLASH_ACR REGISTER WITH VALUE 0x703 =================
+
+	Swd_Demo>>swd_write_ap 1 1073888256							// jumped back to flash peripheral base register
+	AP_Write = 0x40023c00, ACK:1, Parity:0, Cmd:8b
+	
+	Swd_Demo>>swd_read_ap 3										// successfully jumped to flash peripheral base register
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:af
+
+	Swd_Demo>>swd_read_dp 3										// FLASH_ACR 0x700 recieved
+	DP_Read = 0x700, ACK:1, Parity:1, Cmd:af
+	
+	Swd_Demo>>swd_write_ap 1 1073888256							// jumped back to flash peripheral base register to write FLASH_ACR register
+	AP_Write = 0x40023c00, ACK:1, Parity:0, Cmd:8b
+	
+	Swd_Demo>>swd_write_ap 3 1795								// Write FLASH_ACR register with value 0x703
+	AP_Write = 0x703, ACK:1, Parity:1, Cmd:bb
+	
+	Swd_Demo>>swd_write_ap 1 1073888256							// jumped back to flash peripheral base register to write FLASH_ACR register
+	AP_Write = 0x40023c00, ACK:1, Parity:0, Cmd:8b
+	
+	Swd_Demo>>swd_read_ap 3										// read & check the value we have written to FLASH_ACR register
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:af
+	
+	Swd_Demo>>swd_read_dp 3										// successfully written FLASH_ACR register
+	DP_Read = 0x703, ACK:1, Parity:1, Cmd:9f
+	
+	
+	
+	
+	
+
+====== TRY UNLOCKING FLASH BY WRITTING KEY 0x45670123 TO FLASH_KEY REGISTER =================	
+
+	Swd_Demo>>swd_write_ap 1 1073888256							// jumped back to flash peripheral base register
+	AP_Write = 0x40023c00, ACK:1, Parity:0, Cmd:8b
+	
+	Swd_Demo>>swd_read_ap 1										// successfully jumped to flash peripheral base register
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:af
+
+	Swd_Demo>>swd_read_ap 3										// read FLASH_ACR register to get AP TAR to point to FLASH_KEY register
+	AP_Read = 0x40023c00, ACK:1, Parity:0, Cmd:9f
+
+	Swd_Demo>>swd_read_ap 1
+	AP_Read = 0x700, ACK:1, Parity:1, Cmd:af
+	
+	Swd_Demo>>swd_read_ap 1										// TAR pointing to FLASH_KEY register
+	AP_Read = 0x40023c04, ACK:1, Parity:1, Cmd:af
+
+	Swd_Demo>>swd_write_ap 3 1164378403							// write FLASH_KEY(0x45670123) mentioned in datasheet for Unlocking Flash
+	AP_Write = 0x45670123, ACK:1, Parity:0, Cmd:bb
+
+	Swd_Demo>>swd_read_ap 1										// Bus HALT with wdataerr
+	AP_Read = 0xffffffff, ACK:1, Parity:1, Cmd:af
+
+	Swd_Demo>>swd_init											// swd init required for bus to function again
+	TARGET_ID = 0x2ba01477, Result:1, Parity:0_a5
+
+	Swd_Demo>>swd_read_dp 1										// read CSW register wdataerr flag recieved 0X80
+	DP_Read = 0x80, ACK:1, Parity:1, Cmd:8d	
+	
+	Swd_Demo>>swd_write_dp 0 8									// clear wdataerr using ABORT resiter of DP
+	DP_Write = 0x8, ACK:1, Parity:1, Cmd:a3
+
+	Swd_Demo>>swd_read_dp 1										// check for successfully clear of wdataerr
+	DP_Read = 0xf4000000, ACK:1, Parity:1, Cmd:8d
+
+	Swd_Demo>>swd_read_ap 1										// ckeck ap is still pointing to FLASH_KEY register address
+	AP_Read = 0x40023c04, ACK:1, Parity:1, Cmd:af
